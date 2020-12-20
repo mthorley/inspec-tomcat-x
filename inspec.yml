@@ -1,0 +1,16 @@
+name: tomcat9-x
+title: InSpec Profile for Tomcat9
+maintainer: matt.thorley@gmail.com
+copyright: Fortisec
+copyright_email: matt.thorley@gmail.com
+license: Apache-2.0
+summary: An basic InSpec Compliance Profile for Tomcat9
+version: 0.1.0
+supports:
+  platform: os
+  
+inputs:
+- name: webxml_path
+  value: ./test/web.xml
+  type: string
+
