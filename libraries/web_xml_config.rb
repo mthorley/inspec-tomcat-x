@@ -1,4 +1,5 @@
-require "rexml/document"
+
+require 'nokogiri'
 
 class WebXmlConfig < Inspec.resource(1)
   name "web_xml_config"
@@ -9,7 +10,6 @@ class WebXmlConfig < Inspec.resource(1)
 
   example "
     describe web_xml_config do
-      it { should exist }
       its('http_header_security_filter') { should be true }
     end
   "
@@ -20,140 +20,134 @@ class WebXmlConfig < Inspec.resource(1)
   HTTP_HDR_CORS_FILTER_JAVA_CLASS = 
     'org.apache.catalina.filters.CorsFilter'
 
-  def initialize(path = nil)
-    @path = path || "${TOMCAT-HOME}/conf/web.xml"
-    @file = File.new(@path)
+  HTTP_DEFAULT_SERVLET_JAVA_CLASS = 
+     'org.apache.catalina.servlets.DefaultServlet'
 
-    begin
-      @doc = REXML::Document.new(@file)
+  def initialize(opts = {})
+    raise ArgumentError ':catalina_home MUST be set in options hash' unless opts.key?(:catalina_home)
+    web_conf_file = inspec.file("#{opts[:catalina_home]}/conf/web.xml")
+    return skip_resource("File '#{web_conf_file}' not found") unless web_conf_file.exist?
+    @doc = Nokogiri::XML(web_conf_file.content)
+    @doc.remove_namespaces!
+  end
 
-    rescue StandardError => e
-      raise Inspec::Exceptions::ResourceSkipped, "#{@file}: #{e.message}"
-    end
+  #
+  # default servlet methods
+  #
+  def default_servlet_readonly? 
+    e = @doc.xpath(get_defaultservlet_xpath('readonly'))
+    ro = false
+    ro = e.children.to_s.eql?('true') ? true : false unless e.empty?
   end
-  
-  def exists?
-    File.exist?(@path)
+
+  def default_servlet_listings?
+    e = @doc.xpath(get_defaultservlet_xpath('listings'))
+    l = true
+    l = e.children.to_s.eql?('false') ? false : true unless e.empty?
   end
-    
-  def http_header_security_filter
-    find_filter_index_for(HTTP_HDR_SEC_FILTER_JAVA_CLASS) > 0
+
+  def default_servlet_debug
+    e = @doc.xpath(get_defaultservlet_xpath('debug'))
+    d = 1
+    d = e.children.to_s unless e.empty?
+    d.to_i
+  end
+
+  def default_servlet_showserverinfo?
+    e = @doc.xpath(get_defaultservlet_xpath('showServerInfo'))
+    s = true
+    s = e.children.to_s.eql?('false') ? false : true unless e.empty?    
+  end
+
+  def default_servlet_startup
+    e = @doc.xpath("/web-app/servlet[servlet-class='#{HTTP_DEFAULT_SERVLET_JAVA_CLASS}']/load-on-startup")
+    pos = 0
+    pos = e.children.to_s unless e.empty?
+    pos.to_i
+  end
+
+  #
+  # http header security filter
+  #
+  def http_header_security_filter?
+    e = @doc.xpath("/web-app/filter[filter-class='#{HTTP_HDR_SEC_FILTER_JAVA_CLASS}']")
+    not e.empty?
   end
 
   def http_header_security_url_pattern
-    r = ""
-    i = find_filter_index_for(HTTP_HDR_SEC_FILTER_JAVA_CLASS)
-    if (i>0)
-      filter_name = REXML::XPath.first(@doc, "//filter[" + i.to_s + "]/filter-name").text
-      r = filter_mapping_value_for(filter_name, "url-pattern")
-    end
-    r
+    get_filter_mapping_url_pattern(HTTP_HDR_SEC_FILTER_JAVA_CLASS)
   end
 
   def hsts_enabled?
-    param_value_for(HTTP_HDR_SEC_FILTER_JAVA_CLASS, 
-      'hstsEnabled')=='true' ? true : false
+    e = @doc.xpath(get_filter_xpath(HTTP_HDR_SEC_FILTER_JAVA_CLASS, "hstsEnabled"))
+    enabled = false
+    enabled = e.children.to_s.eql?('true') unless e.empty?
+    enabled
   end
 
   def hsts_maxAgeSeconds
-    param_value_for(HTTP_HDR_SEC_FILTER_JAVA_CLASS, 
-      'hstsMaxAgeSeconds').to_i
+    e = @doc.xpath(get_filter_xpath(HTTP_HDR_SEC_FILTER_JAVA_CLASS, "hstsMaxAgeSeconds"))
+    age = nil
+    age = e.children.to_s unless e.empty?
+    age.to_i
   end
   
   def hsts_includeSubDomains?
-    param_value_for(HTTP_HDR_SEC_FILTER_JAVA_CLASS, 
-      'hstsIncludeSubDomains')=='true' ? true : false
+    e = @doc.xpath(get_filter_xpath(HTTP_HDR_SEC_FILTER_JAVA_CLASS, "hstsIncludeSubDomains"))
+    inc = false
+    inc = e.children.to_s.eql?('true') unless e.empty?
+    inc
   end
   
   def xfo_enabled?
-    param_value_for(HTTP_HDR_SEC_FILTER_JAVA_CLASS, 
-      'antiClickJackingEnabled')=='true' ? true : false
+    e = @doc.xpath(get_filter_xpath(HTTP_HDR_SEC_FILTER_JAVA_CLASS, "antiClickJackingEnabled"))
+    xfo = false
+    xfo = e.children.to_s.eql?('true') unless e.empty?
+    xfo
   end
 
   def xfo_option
-    param_value_for(HTTP_HDR_SEC_FILTER_JAVA_CLASS, 
-      'antiClickJackingOption')
+    e = @doc.xpath(get_filter_xpath(HTTP_HDR_SEC_FILTER_JAVA_CLASS, "antiClickJackingOption"))
+    xfo = nil
+    xfo = e.children.to_s unless e.empty?
+    xfo
   end
 
+  #
+  # http header cors filter
+  #
   def http_header_cors_filter?
-    find_filter_index_for(HTTP_HDR_CORS_FILTER_JAVA_CLASS) > 0
+    e = @doc.xpath("/web-app/filter[filter-class='#{HTTP_HDR_CORS_FILTER_JAVA_CLASS}']")
+    not e.empty?
+  end
+
+  def http_header_cors_url_pattern
+    get_filter_mapping_url_pattern(HTTP_HDR_CORS_FILTER_JAVA_CLASS)
   end
 
 private
 
-  # Returns the param-value element for a param-name, given its filter-class.
-  # 
-  # Given the xml:
-  #   <filter-class>org.apache.clazz</filter-class>
-  #   <init-param>
-  #     <param-name>hsts</param-name>
-  #     <param-value>true</param-value>
-  #   </init-param>
-  # 
-  # Invoking param_value_for("org.apache.clazz", "hsts") would return true.
-  #
-  def param_value_for(classname, name)
-    r = nil
-    i = find_filter_index_for(classname)
-    REXML::XPath.each(@doc, "//filter[" + i.to_s + "]/init-param") { |e|
-      if e[1].name == "param-name" && e[1].text == name 
-        if e[3].name == "param-value"
-          r = e[3].text
-        end
-      end
-    }
-    r
+  def get_filter_mapping_url_pattern(filter_class) 
+    ptn = nil;
+    e = @doc.xpath("/web-app/filter[filter-class='#{filter_class}']/filter-name")
+    filter_name = nil
+    filter_name = e.children.to_s unless e.empty?
+    if (filter_name==nil)
+      return ptn
+    end
+
+    e = @doc.xpath("/web-app/filter-mapping[filter-name='#{filter_name}']/url-pattern")
+    ptn = nil
+    ptn = e.children.to_s unless e.empty?
+    ptn
   end
 
-  # find the filter index for a Java classname
-  def find_filter_index_for(classname) 
-    index = 0
-    n = REXML::XPath.first(@doc, "count(//filter)")
-    for i in 1..n do
-      REXML::XPath.each(@doc, "//filter[" + i.to_s + "]/*") { |e|
-        if e.name == "filter-class" && e.text == classname
-          index = i
-        end
-      }
-    end
-    index
+  def get_filter_xpath(filter_class, param_name)
+    "/web-app/filter[filter-class='#{filter_class}']/init-param[param-name='#{param_name}']/param-value"
   end
 
-  # Returns a peer element value for a filter-name.
-  # 
-  # Given the xml:
-  #   <filter-mapping>
-  #     <filter-name>httpHeaderSecurity</filter-name>
-  #     <url-pattern>/*</url-pattern>
-  #   </filter-mapping>
-  #
-  # Invoking filter_mapping_value_for("httpHeaderSecurity", "url-pattern") would return '/*'.
-  #
-  def filter_mapping_value_for(filter_name, name)
-    r = nil
-    i = find_filter_mapping_index_for(filter_name)
-    if (i>0)
-      REXML::XPath.each(@doc, "//filter-mapping[" + i.to_s + "]/*") { |e|
-        if e.name == name
-          r = e.text
-        end
-      }
-    end
-    r
-  end
-
-  # find the filter_mapping index for a filter name
-  def find_filter_mapping_index_for(filter_name)
-    index = 0
-    n = REXML::XPath.first(@doc, "count(//filter-mapping)")
-    for i in 1..n do
-      REXML::XPath.each(@doc, "//filter-mapping[" + i.to_s + "]/*") { |e|
-        if e.name == "filter-name" && e.text == filter_name
-          index = i
-        end
-      }
-    end
-    index
+  def get_defaultservlet_xpath(param_name)
+    "/web-app/servlet[servlet-class='#{HTTP_DEFAULT_SERVLET_JAVA_CLASS}']/init-param[param-name='#{param_name}']/param-value"
   end
 
 end

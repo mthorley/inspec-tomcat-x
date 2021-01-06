@@ -4,13 +4,12 @@ maintainer: matt.thorley@gmail.com
 copyright: Fortisec
 copyright_email: matt.thorley@gmail.com
 license: Apache-2.0
-summary: An basic InSpec Compliance Profile for Tomcat9
+summary: An supplementary InSpec Compliance Profile for Tomcat9 which defines controls where gaps exist in the current CIS benchmark
 version: 0.1.0
 supports:
   platform: os
   
 inputs:
-- name: webxml_path
-  value: ./test/web.xml
+- name: catalina_home
+  value: ./test/pass
   type: string
-
