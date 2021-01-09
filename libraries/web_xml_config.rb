@@ -125,6 +125,23 @@ class WebXmlConfig < Inspec.resource(1)
     get_filter_mapping_url_pattern(HTTP_HDR_CORS_FILTER_JAVA_CLASS)
   end
 
+  #
+  # cookieconfig
+  #
+  def cookie_config_httponly?
+    e = @doc.xpath("/web-app/session-config/cookie-config/http-only")
+    r = false
+    r = e.children.to_s.eql?('true') unless e.empty?
+    r    
+  end
+  
+  def cookie_config_secure?
+    e = @doc.xpath("/web-app/session-config/cookie-config/secure")
+    r = false
+    r = e.children.to_s.eql?('true') unless e.empty?
+    r  
+  end
+
 private
 
   def get_filter_mapping_url_pattern(filter_class) 

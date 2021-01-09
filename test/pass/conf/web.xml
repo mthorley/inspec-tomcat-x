@@ -64,4 +64,13 @@ version="3.1">
   <filter-name>CorsFilter</filter-name>
   <url-pattern>/*</url-pattern>
 </filter-mapping>
+
+ <session-config>
+  <session-timeout>30</session-timeout>
+  <cookie-config>
+    <http-only>true</http-only>
+    <secure>true</secure>
+  </cookie-config>
+</session-config>
+
 </web-app>
