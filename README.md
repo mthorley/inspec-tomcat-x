@@ -8,7 +8,7 @@ Profile expects the following inputs:
 - catalina_home which specifies the tomcat installation root for 
 	- conf/
 		- web.xml
-    - server.xml
+		- server.xml
 
 ## Install Inspec
 
