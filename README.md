@@ -8,6 +8,7 @@ Profile expects the following inputs:
 - catalina_home which specifies the tomcat installation root for 
 	- conf/
 		- web.xml
+    - server.xml
 
 ## Install Inspec
 
@@ -22,10 +23,11 @@ $ inspec exec . --input catalina_home="./test/pass"
 $ inspec exec . --input catalina_home="./test/fail"
 $ inspec exec . --input catalina_home="./test/empty"
 ```
+All tests should fail for both fail and empty configurations.
 
 ## Execute against a target running tomcat container
 
-Note this assumes inspec (and tomcat inspec profile) is running on the same host as the docker socket. Therefore neither inspec nor the inspec source controls are required to be deployed in the container which keeps the container image clean and supports adding new controls independently.
+Note this assumes inspec (and tomcat inspec profile) are running on the same host as the docker socket. Therefore neither inspec nor the inspec source controls are required to be deployed in the container which keeps the container image clean and supports adding new controls independently.
 
 ```console
 # grab a docker image of tomcat and run it
