@@ -1,0 +1,4 @@
+
+Layout/LineLength:
+  Exclude:
+    - '**/*.rb'
